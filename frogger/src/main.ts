@@ -1,17 +1,26 @@
 /**
  * Frogger Game - Main Entry Point
- * Phase 1 Implementation: Grid System, Config, and Input
+ * Phase 2 Implementation: Game Entities
  *
  * This file demonstrates the integration of:
- * - Config system with game constants
- * - Grid system with lane types
- * - Input system with grid-based movement
+ * - Frog entity class
+ * - Vehicle entity class
+ * - Platform entity class
+ * - HomeSlot entity class
  */
 
-import { Application, Graphics } from "pixi.js";
-import { grid, GridPosition } from "./grid";
-import { SCREEN_WIDTH, SCREEN_HEIGHT, TILE_SIZE } from "./config";
+import { Application, Graphics, Container } from "pixi.js";
+import { grid } from "./grid";
+import { SCREEN_WIDTH, SCREEN_HEIGHT, TILE_SIZE, LANE_CONFIG } from "./config";
 import { MovementController } from "./input";
+import { Frog } from "./entities/frog";
+import { Vehicle, createVehicle, type VehicleType } from "./entities/vehicle";
+import {
+  Platform,
+  createPlatform,
+  type PlatformType,
+} from "./entities/platform";
+import { HomeSlot, createHomeSlots } from "./entities/homeSlot";
 
 // ============================================
 // GAME INITIALIZATION
@@ -98,110 +107,239 @@ import { MovementController } from "./input";
   app.stage.addChild(laneBackgrounds);
 
   // ============================================
-  // HOME SLOTS VISUALIZATION
+  // ENTITY MANAGERS
   // ============================================
 
-  const homeSlots = grid.getHomeSlotPositions(5);
-  const homeSlotGraphics = new Graphics();
-
-  for (const slot of homeSlots) {
-    homeSlotGraphics
-      .lineStyle(2, 0xffffff)
-      .drawRect(
-        slot.x * TILE_SIZE + 2,
-        slot.y * TILE_SIZE + 2,
-        TILE_SIZE - 4,
-        TILE_SIZE - 4,
-      );
-  }
-
-  app.stage.addChild(homeSlotGraphics);
-
-  // ============================================
-  // FROG
-  // ============================================
-
-  // Create frog using Graphics API
-  const frog = new Graphics()
-    .circle(0, 0, TILE_SIZE / 2 - 5) // Slightly smaller than tile
-    .fill(0x00ff00) // Green
-    .circle(-8, -5, 3) // Left eye
-    .circle(8, -5, 3) // Right eye
-    .fill(0xffffff) // White eyes
-    .circle(-8, -5, 1) // Left pupil
-    .circle(8, -5, 1) // Right pupil
-    .fill(0x000000); // Black pupils
-
-  // Set frog pivot to center
-  frog.pivot.set(TILE_SIZE / 2, TILE_SIZE / 2);
-
-  // Start frog at the default starting position
-  let frogPosition: GridPosition = grid.getFrogStartPosition();
-  let frogTargetPosition: GridPosition | null = null;
-  let frogMoveProgress: number = 0;
-
-  // Initial position
-  updateFrogPosition();
-
-  app.stage.addChild(frog);
-
-  // ============================================
-  // INPUT SYSTEM
-  // ============================================
-
+  // Input system
   const movementController = new MovementController();
 
+  // Entities container (for easy management)
+  const entitiesContainer = new Container();
+  app.stage.addChild(entitiesContainer);
+
   // ============================================
-  // MOVEMENT LOGIC
+  // FROG ENTITY
+  // ============================================
+
+  // Create the frog entity
+  const frog = new Frog(movementController);
+  entitiesContainer.addChild(frog.getContainer());
+
+  // ============================================
+  // HOME SLOTS
+  // ============================================
+
+  // Create home slots
+  const homeSlots: HomeSlot[] = createHomeSlots(5);
+  for (const slot of homeSlots) {
+    entitiesContainer.addChild(slot.getContainer());
+    // Randomly add bonuses to some slots
+    if (Math.random() < 0.3) {
+      slot.addFlyBonus();
+    }
+    if (Math.random() < 0.1) {
+      slot.addAlligatorMouth();
+    }
+  }
+
+  // ============================================
+  // VEHICLES (Traffic Lanes)
+  // ============================================
+
+  const vehicles: Vehicle[] = [];
+
+  // Create vehicles for traffic lanes
+  for (let row = 0; row < grid.getDimensions().rows; row++) {
+    const laneConfig = LANE_CONFIG[row];
+    if (laneConfig.type !== "traffic") continue;
+
+    // Create vehicles based on lane configuration
+    for (const entityConfig of laneConfig.entities) {
+      const vehicle = createVehicle(
+        entityConfig.type as VehicleType,
+        row,
+        laneConfig.direction || "right",
+        laneConfig.speed,
+        entityConfig.width,
+      );
+
+      // Spawn at random positions
+      const spawnX = Math.floor(Math.random() * grid.getDimensions().cols);
+      vehicle.spawn(spawnX);
+
+      vehicles.push(vehicle);
+      entitiesContainer.addChild(vehicle.getContainer());
+    }
+  }
+
+  // ============================================
+  // PLATFORMS (Water Lanes)
+  // ============================================
+
+  const platforms: Platform[] = [];
+
+  // Create platforms for water lanes
+  for (let row = 0; row < grid.getDimensions().rows; row++) {
+    const laneConfig = LANE_CONFIG[row];
+    if (laneConfig.type !== "water") continue;
+
+    // Create platforms based on lane configuration
+    for (const entityConfig of laneConfig.entities) {
+      const platform = createPlatform(
+        entityConfig.type as PlatformType,
+        row,
+        laneConfig.direction || "right",
+        laneConfig.speed,
+        entityConfig.width,
+      );
+
+      // Spawn at random positions
+      const spawnX = Math.floor(Math.random() * grid.getDimensions().cols);
+      platform.spawn(spawnX);
+
+      platforms.push(platform);
+      entitiesContainer.addChild(platform.getContainer());
+    }
+  }
+
+  // ============================================
+  // GAME STATE
+  // ============================================
+
+  // Track game state
+  let score = 0;
+  let lives = 3;
+  let frogsSaved = 0;
+
+  // ============================================
+  // COLLISION DETECTION
   // ============================================
 
   /**
-   * Update frog's pixel position based on grid position and movement state
+   * Check if two bounds intersect
    */
-  function updateFrogPosition(): void {
-    // Calculate base position (center of grid cell)
-    const basePixel = grid.gridToPixelCenter(frogPosition);
+  function checkBoundsCollision(
+    bounds1: { x: number; y: number; width: number; height: number },
+    bounds2: { x: number; y: number; width: number; height: number },
+  ): boolean {
+    return (
+      bounds1.x < bounds2.x + bounds2.width &&
+      bounds1.x + bounds1.width > bounds2.x &&
+      bounds1.y < bounds2.y + bounds2.height &&
+      bounds1.y + bounds1.height > bounds2.y
+    );
+  }
 
-    // If moving, interpolate between current and target
-    if (frogTargetPosition && frogMoveProgress > 0) {
-      const targetPixel = grid.gridToPixelCenter(frogTargetPosition);
-      const currentPixel = grid.gridToPixelCenter(frogPosition);
+  // ============================================
+  // GAME LOGIC HELPERS
+  // ============================================
 
-      const x =
-        currentPixel.x +
-        (targetPixel.x - currentPixel.x) * (1 - frogMoveProgress);
-      const y =
-        currentPixel.y +
-        (targetPixel.y - currentPixel.y) * (1 - frogMoveProgress);
+  /**
+   * Check if the frog has reached a home slot
+   */
+  function checkHomeSlotReached(): void {
+    const frogGridPos = frog.getGridPosition();
 
-      frog.position.set(x, y);
-    } else {
-      // Not moving, just set to current position
-      frog.position.set(basePixel.x, basePixel.y);
+    for (const slot of homeSlots) {
+      if (slot.isEmpty() && slot.containsPosition(frogGridPos)) {
+        // Frog reached an empty home slot!
+        slot.fill(frog);
+        score += 10; // Base score
+        frogsSaved++;
+
+        // Check for adjacent empty slots for bonus
+        const adjacentEmpty = homeSlots.filter(
+          (s) =>
+            s.isEmpty() &&
+            Math.abs(s.getSlotIndex() - slot.getSlotIndex()) <= 1,
+        ).length;
+        score += adjacentEmpty * 10; // Bonus for adjacent empty slots
+
+        // Reset frog after a delay
+        setTimeout(() => {
+          frog.reset();
+          if (frogsSaved >= 5) {
+            console.log("LEVEL COMPLETE! All 5 frogs saved!");
+            // Reset all home slots for next level
+            homeSlots.forEach((s) => s.clear());
+            frogsSaved = 0;
+          }
+        }, 500);
+
+        console.log(`Score: ${score}, Frogs Saved: ${frogsSaved}/5`);
+        break;
+      }
     }
   }
 
   /**
-   * Start a move animation to a new grid position
+   * Check if the frog has collided with a vehicle
    */
-  function startMove(direction: GridPosition): void {
-    frogTargetPosition = {
-      x: frogPosition.x + direction.x,
-      y: frogPosition.y + direction.y,
-    };
-    frogMoveProgress = 1.0; // Start at full progress (beginning of animation)
+  function checkVehicleCollision(): boolean {
+    const frogBounds = frog.getCollisionBounds();
+
+    for (const vehicle of vehicles) {
+      if (!vehicle.isActiveVehicle()) continue;
+
+      const vehicleBounds = vehicle.getCollisionBounds();
+      if (checkBoundsCollision(frogBounds, vehicleBounds)) {
+        // Collision detected!
+        console.log(`Frog hit by ${vehicle.getType()}!`);
+        lives--;
+        if (lives <= 0) {
+          console.log("GAME OVER!");
+        } else {
+          console.log(`${lives} lives remaining`);
+        }
+        frog.die();
+        setTimeout(() => {
+          frog.reset();
+        }, 1000);
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
-   * Complete the move animation
+   * Check if the frog is in water without a platform
    */
-  function completeMove(): void {
-    if (frogTargetPosition) {
-      frogPosition = { ...frogTargetPosition };
-      frogTargetPosition = null;
-      frogMoveProgress = 0;
-      movementController.reset();
+  function checkWaterDanger(): boolean {
+    const frogGridPos = frog.getGridPosition();
+
+    // Check if frog is in water lane
+    if (grid.isWaterLane(frogGridPos)) {
+      // Check if frog is on a platform
+      const frogBounds = frog.getCollisionBounds();
+      let onPlatform = false;
+
+      for (const platform of platforms) {
+        if (!platform.isActivePlatform() || platform.getIsSubmerged()) continue;
+
+        const platformBounds = platform.getCollisionBounds();
+        if (checkBoundsCollision(frogBounds, platformBounds)) {
+          onPlatform = true;
+          break;
+        }
+      }
+
+      // If in water but not on a platform, frog drowns
+      if (!onPlatform) {
+        console.log("Frog drowned!");
+        lives--;
+        if (lives <= 0) {
+          console.log("GAME OVER!");
+        } else {
+          console.log(`${lives} lives remaining`);
+        }
+        frog.die();
+        setTimeout(() => {
+          frog.reset();
+        }, 1000);
+        return true;
+      }
     }
+    return false;
   }
 
   // ============================================
@@ -209,38 +347,59 @@ import { MovementController } from "./input";
   // ============================================
 
   app.ticker.add((ticker) => {
-    // In PixiJS v8, ticker.deltaTime is the time since last frame
     const delta: number = ticker.deltaTime;
 
     // Update input system
     movementController.update(delta);
 
-    // Check for new movement direction
-    if (!frogTargetPosition) {
-      const direction = movementController.getNextDirection(frogPosition);
-      if (direction) {
-        startMove(direction);
+    // Update frog
+    frog.update(delta);
+
+    // Update vehicles
+    for (const vehicle of vehicles) {
+      vehicle.update(delta);
+
+      // Despawn and respawn vehicles that go off-screen
+      const pixelPos = vehicle.getPixelPosition();
+      if (pixelPos.x < -100 || pixelPos.x > SCREEN_WIDTH + 100) {
+        // Off-screen: respawn on the other side
+        const newX =
+          vehicle.getDirection() === "right"
+            ? 0
+            : grid.getDimensions().cols - 1;
+        vehicle.spawn(newX);
       }
     }
 
-    // Update move animation
-    if (frogTargetPosition) {
-      frogMoveProgress -= delta * 5; // Adjust speed of animation (5 = multiplier)
+    // Update platforms
+    for (const platform of platforms) {
+      platform.update(delta);
 
-      if (frogMoveProgress <= 0) {
-        completeMove();
+      // Despawn and respawn platforms that go off-screen
+      const pixelPos = platform.getPixelPosition();
+      if (pixelPos.x < -100 || pixelPos.x > SCREEN_WIDTH + 100) {
+        // Off-screen: respawn on the other side
+        const newX =
+          platform.getDirection() === "right"
+            ? 0
+            : grid.getDimensions().cols - 1;
+        platform.spawn(newX);
       }
     }
 
-    // Update frog position
-    updateFrogPosition();
+    // Check for collisions and game events
+    if (frog.isActiveFrog()) {
+      checkHomeSlotReached();
+      checkVehicleCollision();
+      checkWaterDanger();
+    }
   });
 
   // ============================================
   // CONSOLE LOGGING
   // ============================================
 
-  console.log("=== Frogger Phase 1 ===");
+  console.log("=== Frogger Phase 2 ===");
   console.log(
     `Grid: ${grid.getDimensions().cols} cols x ${grid.getDimensions().rows} rows`,
   );
@@ -249,9 +408,13 @@ import { MovementController } from "./input";
   console.log(
     `Frog Start Position: (${grid.getFrogStartPosition().x}, ${grid.getFrogStartPosition().y})`,
   );
-  console.log("Home Slots:", grid.getHomeSlotPositions(5));
   console.log("\nControls: Arrow Keys or WASD to move one tile at a time");
-  console.log("Goal: Reach the top row (goal lane)");
+  console.log("Goal: Reach the top row (goal lane) and land in home slots");
+  console.log(`\nEntities:`);
+  console.log(`- 1 Frog (green)`);
+  console.log(`- ${vehicles.length} Vehicles in traffic lanes`);
+  console.log(`- ${platforms.length} Platforms in water lanes`);
+  console.log(`- ${homeSlots.length} Home slots at the top`);
   console.log("\nLane Types (from top to bottom):");
 
   for (let row = 0; row < grid.getDimensions().rows; row++) {
@@ -262,4 +425,10 @@ import { MovementController } from "./input";
       `Row ${row}: ${laneType}${laneConfig ? ` (${laneConfig}, ${speed}px/s)` : ""}`,
     );
   }
+
+  console.log("\nGame Rules:");
+  console.log("- Hit by vehicle = lose a life");
+  console.log("- In water without platform = lose a life");
+  console.log("- Reach home slot = 10 points + bonus for adjacent empty slots");
+  console.log("- Fill all 5 home slots = LEVEL COMPLETE!");
 })();
