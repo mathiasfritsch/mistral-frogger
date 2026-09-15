@@ -9,7 +9,7 @@
 ## Implementation Status
 
 - **Phase 1: Core Infrastructure** - ✅ COMPLETED
-- **Phase 2: Game Entities** - ⏳ Pending
+- **Phase 2: Game Entities** - ✅ COMPLETED
 - **Phase 3: Lane & Level System** - ⏳ Pending
 - **Phase 4: Collision & Game Logic** - ⏳ Pending
 - **Phase 5: Scoring & Lives** - ⏳ Pending
