@@ -350,7 +350,7 @@ import { HomeSlot, createHomeSlots } from "./entities/homeSlot";
     const delta: number = ticker.deltaTime;
 
     // Update input system
-    movementController.update(delta);
+    movementController.update();
 
     // Update frog
     frog.update(delta);

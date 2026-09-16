@@ -3,7 +3,7 @@
  * Grid-based movement with keyboard controls
  */
 
-import { GridPosition, grid } from "./grid";
+import { GridPosition } from "./grid";
 
 // ============================================
 // KEY STATE MANAGER
@@ -139,78 +139,31 @@ export class KeyManager {
  */
 export class MovementController {
   private keyManager: KeyManager;
-  private isMoving: boolean;
-  private moveCooldown: number;
-  private readonly MOVE_COOLDOWN_DURATION: number = 150; // ms between moves
 
   constructor() {
     this.keyManager = new KeyManager();
-    this.isMoving = false;
-    this.moveCooldown = 0;
   }
 
   /**
-   * Try to get the next movement direction
-   * Returns null if on cooldown or no movement key pressed
+   * Get the current movement direction from keyboard input
+   * Returns the direction if a movement key is pressed, null otherwise
    */
-  getNextDirection(currentPosition: GridPosition): GridPosition | null {
-    // Check if we're on cooldown
-    if (this.isMoving) {
-      return null;
-    }
-
-    const direction = this.keyManager.getMovementDirection();
-    if (!direction) {
-      return null;
-    }
-
-    // Calculate target position
-    const targetPosition: GridPosition = {
-      x: currentPosition.x + direction.x,
-      y: currentPosition.y + direction.y,
-    };
-
-    // Check if the move is valid (within grid bounds)
-    if (!grid.isWithinBounds(targetPosition)) {
-      return null;
-    }
-
-    // Start cooldown
-    this.isMoving = true;
-    this.moveCooldown = this.MOVE_COOLDOWN_DURATION;
-
-    return direction;
+  getDirection(): GridPosition | null {
+    return this.keyManager.getMovementDirection();
   }
 
   /**
    * Update the movement controller (call this each frame)
-   * @param delta - Time since last frame in seconds
    */
-  update(delta: number): void {
+  update(): void {
     this.keyManager.update();
-
-    // Update cooldown
-    if (this.isMoving) {
-      this.moveCooldown -= delta * 1000; // Convert to milliseconds
-      if (this.moveCooldown <= 0) {
-        this.isMoving = false;
-      }
-    }
   }
 
   /**
-   * Force reset the movement cooldown (e.g., when frog dies)
+   * Reset the movement controller
    */
   reset(): void {
-    this.isMoving = false;
-    this.moveCooldown = 0;
-  }
-
-  /**
-   * Check if currently in a move animation
-   */
-  isInMove(): boolean {
-    return this.isMoving;
+    // Nothing to reset - cooldown is handled by the Frog
   }
 
   /**

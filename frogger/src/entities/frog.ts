@@ -58,6 +58,10 @@ export class Frog {
   private hopDirection: number; // 1 for expanding, -1 for contracting
   private isHopping: boolean;
 
+  // Movement cooldown
+  private moveCooldown: number = 0;
+  private readonly MOVE_COOLDOWN_DURATION: number = 0.15; // seconds between moves
+
   // Collision bounds
   public bounds: { x: number; y: number; width: number; height: number };
 
@@ -174,6 +178,7 @@ export class Frog {
     this.gridPosition = grid.getFrogStartPosition();
     this.targetPosition = null;
     this.moveProgress = 0;
+    this.moveCooldown = 0;
     this.state = "idle";
     this.isActive = true;
     this.hopScale = 1.0;
@@ -188,6 +193,7 @@ export class Frog {
     this.state = "dead";
     this.isActive = false;
     this.targetPosition = null;
+    this.moveCooldown = 0;
   }
 
   /**
@@ -228,13 +234,17 @@ export class Frog {
   update(delta: number): void {
     if (!this.isActive) return;
 
-    // Check for new movement input
-    if (this.state === "idle" || this.state === "hopping") {
-      const direction = this.movementController.getNextDirection(
-        this.gridPosition,
-      );
+    // Update move cooldown
+    if (this.moveCooldown > 0) {
+      this.moveCooldown -= delta;
+    }
+
+    // Check for new movement input (only when idle and cooldown expired)
+    if (this.state === "idle" && this.moveCooldown <= 0) {
+      const direction = this.movementController.getDirection();
       if (direction) {
         this.startMove(direction);
+        this.moveCooldown = this.MOVE_COOLDOWN_DURATION; // Start cooldown
       }
     }
 
