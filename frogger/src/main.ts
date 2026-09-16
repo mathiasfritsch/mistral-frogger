@@ -29,13 +29,15 @@ import { HomeSlot } from "./entities/homeSlot";
   }
   app.stage.addChild(grid);
 
+  // Phase 2.4 — Render the five home slots in the goal row.
+  const homeSlots = HOME_SLOT_COLS.map((column) => new HomeSlot(column));
+  homeSlots.forEach((slot) => app.stage.addChild(slot));
+
   // Phase 2.1 — The frog starts on the bottom grass row, centered.
   const frog = new Frog(Math.floor(GRID_COLS / 2), GRID_ROWS - 1);
   app.stage.addChild(frog);
 
-  // Phase 2.4 — Render the five home slots in the goal row.
-  const homeSlots = HOME_SLOT_COLS.map((column) => new HomeSlot(column));
-  homeSlots.forEach((slot) => app.stage.addChild(slot));
+
 
   const keys = new KeyManager();
 
