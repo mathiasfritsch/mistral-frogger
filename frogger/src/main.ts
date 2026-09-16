@@ -6,6 +6,10 @@ import { Frog } from "./entities/frog";
 import { HomeSlot } from "./entities/homeSlot";
 import { LaneManager } from "./lanes";
 import { Level } from "./level";
+import { CollisionSystem } from "./collision";
+import { resolveWater } from "./waterLogic";
+import { Game } from "./game";
+import { FrogTimer } from "./timer";
 
 (async () => {
   const app = new Application();
@@ -41,19 +45,65 @@ import { Level } from "./level";
   app.stage.addChild(lanes);
 
   // Phase 2.1 — The frog starts on the bottom grass row, centered.
-  const frog = new Frog(Math.floor(GRID_COLS / 2), GRID_ROWS - 1);
+  const startX = Math.floor(GRID_COLS / 2);
+  const startY = GRID_ROWS - 1;
+  const frog = new Frog(startX, startY);
   app.stage.addChild(frog);
 
+  // Phase 4.3 — Lives and respawn handling.
+  const game = new Game(frog, startX, startY);
+
+  // Phase 4.4 — Per-frog countdown timer, top-right corner.
+  const timer = new FrogTimer();
+  timer.display.x = GRID_COLS * TILE_SIZE - 60;
+  timer.display.y = 10;
+  app.stage.addChild(timer.display);
+
   const keys = new KeyManager();
+  const screenWidth = GRID_COLS * TILE_SIZE;
+  let diedThisFrame = false;
+
+  const die = (): void => {
+    if (diedThisFrame || game.gameOver) return;
+    diedThisFrame = true;
+    game.killFrog();
+    if (!game.gameOver) timer.reset();
+  };
 
   app.ticker.add((ticker) => {
     // Frame-independent updates use seconds.
     const deltaSeconds = ticker.deltaMS / 1000;
+    diedThisFrame = false;
+
+    if (game.gameOver) return;
+
     lanes.update(deltaSeconds);
+    timer.update(deltaSeconds);
 
     // Grid-based hopping: one tile per fresh keypress, no diagonals.
     const direction = keys.consumeDirection();
-    if (!direction) return;
-    frog.hop(direction);
+    if (direction) frog.hop(direction);
+
+    // Phase 4.1 — Vehicle collision.
+    for (const vehicle of lanes.vehicles) {
+      if (CollisionSystem.checkCollision(frog, vehicle)) {
+        die();
+        break;
+      }
+    }
+
+    // Phase 4.2 — Water logic (drowning / riding platforms).
+    if (!diedThisFrame) {
+      const outcome = resolveWater(
+        frog,
+        lanes.platforms,
+        screenWidth,
+        deltaSeconds,
+      );
+      if (outcome === "drowned" || outcome === "carried-off") die();
+    }
+
+    // Phase 4.4 — Timer expiry.
+    if (!diedThisFrame && timer.expired) die();
   });
 })();

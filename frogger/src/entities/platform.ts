@@ -2,12 +2,18 @@ import { Graphics } from "pixi.js";
 import { GRID_COLS, TILE_SIZE } from "../config";
 import type { HorizontalDirection, PlatformType } from "../config";
 
+/** Seconds a turtle stays on the surface before diving. */
+const TURTLE_VISIBLE_SECONDS = 3;
+
+/** Seconds a turtle stays submerged before resurfacing. */
+const TURTLE_SUBMERGED_SECONDS = 1.5;
+
 /**
  * Phase 2.3 — A floating platform (log or turtle) for the water lanes.
  * Turtles dive on a timer, temporarily removing their safe surface.
  */
 export class Platform extends Graphics {
-  private diveTimer = 0;
+  private diveTimer = TURTLE_VISIBLE_SECONDS;
   submerged = false;
 
   constructor(
@@ -30,19 +36,21 @@ export class Platform extends Graphics {
   }
 
   /** Move across the lane, wrap around, and cycle turtle dives. */
-  update(delta: number): void {
+  update(deltaSeconds: number): void {
     const span = this.widthTiles * TILE_SIZE;
     const screenWidth = GRID_COLS * TILE_SIZE;
-    this.x += this.speed * this.direction * delta;
+    this.x += this.speed * this.direction * deltaSeconds;
     if (this.direction === 1 && this.x > screenWidth + span) this.x = -span;
     if (this.direction === -1 && this.x < -span) this.x = screenWidth + span;
 
     if (this.type === "turtle") {
-      this.diveTimer -= delta;
+      this.diveTimer -= deltaSeconds;
       if (this.diveTimer <= 0) {
         this.submerged = !this.submerged;
         this.visible = !this.submerged;
-        this.diveTimer = this.submerged ? 60 : 120;
+        this.diveTimer = this.submerged
+          ? TURTLE_SUBMERGED_SECONDS
+          : TURTLE_VISIBLE_SECONDS;
       }
     }
   }

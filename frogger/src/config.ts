@@ -96,7 +96,7 @@ export const LANE_CONFIG: LaneConfig = {
       direction: -1,
       speed: PLATFORM_SPEEDS.medium,
       platforms: [
-        { type: "turtle", width: 1 },
+        { type: "log", width: 1 },
         { type: "turtle", width: 1 },
         { type: "turtle", width: 1 },
       ],

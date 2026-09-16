@@ -1,6 +1,6 @@
 import { Graphics } from "pixi.js";
-import { TILE_SIZE } from "../config";
-import { clampToGrid, gridToPixel } from "../grid";
+import { GRID_COLS, GRID_ROWS, TILE_SIZE } from "../config";
+import { gridToPixel } from "../grid";
 import type { Direction } from "../input";
 
 /**
@@ -26,27 +26,46 @@ export class Frog extends Graphics {
     this.y = y + TILE_SIZE / 2;
   }
 
-  /** Hop one tile in the given direction, clamped to the play field. */
+  /** Recompute grid coordinates from the current pixel position. */
+  updateGridFromPosition(): void {
+    const half = TILE_SIZE / 2;
+    this.gridX = Math.max(
+      0,
+      Math.min(GRID_COLS - 1, Math.round((this.x - half) / TILE_SIZE)),
+    );
+    this.gridY = Math.max(
+      0,
+      Math.min(GRID_ROWS - 1, Math.round((this.y - half) / TILE_SIZE)),
+    );
+  }
+
+  /**
+   * Hop one tile in the given direction. The hop is relative to the current
+   * pixel position so that a frog riding a platform keeps its carried offset.
+   */
   hop(direction: Direction): void {
     this.state = "moving";
     switch (direction) {
       case "up":
-        this.gridY -= 1;
+        this.y -= TILE_SIZE;
         break;
       case "down":
-        this.gridY += 1;
+        this.y += TILE_SIZE;
         break;
       case "left":
-        this.gridX -= 1;
+        this.x -= TILE_SIZE;
         break;
       case "right":
-        this.gridX += 1;
+        this.x += TILE_SIZE;
         break;
     }
-    const clamped = clampToGrid(this.gridX, this.gridY);
-    this.gridX = clamped.x;
-    this.gridY = clamped.y;
-    this.syncPosition();
+
+    // Clamp to the play field, keeping the frog centered in its tile.
+    const half = TILE_SIZE / 2;
+    this.x = Math.max(half, Math.min(GRID_COLS * TILE_SIZE - half, this.x));
+    this.y = Math.max(half, Math.min(GRID_ROWS * TILE_SIZE - half, this.y));
+
+    this.updateGridFromPosition();
     this.state = "idle";
   }
 }
