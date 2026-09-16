@@ -4,6 +4,8 @@ import { getLaneType, gridToPixel, HOME_SLOT_COLS, LANE_COLORS } from "./grid";
 import { KeyManager } from "./input";
 import { Frog } from "./entities/frog";
 import { HomeSlot } from "./entities/homeSlot";
+import { LaneManager } from "./lanes";
+import { Level } from "./level";
 
 (async () => {
   const app = new Application();
@@ -33,16 +35,23 @@ import { HomeSlot } from "./entities/homeSlot";
   const homeSlots = HOME_SLOT_COLS.map((column) => new HomeSlot(column));
   homeSlots.forEach((slot) => app.stage.addChild(slot));
 
+  // Phase 3 — Lane and level system.
+  const level = new Level(1);
+  const lanes = new LaneManager(level.laneConfig);
+  app.stage.addChild(lanes);
+
   // Phase 2.1 — The frog starts on the bottom grass row, centered.
   const frog = new Frog(Math.floor(GRID_COLS / 2), GRID_ROWS - 1);
   app.stage.addChild(frog);
 
-
-
   const keys = new KeyManager();
 
-  // Grid-based hopping: one tile per fresh keypress, no diagonals.
-  app.ticker.add(() => {
+  app.ticker.add((ticker) => {
+    // Frame-independent updates use seconds.
+    const deltaSeconds = ticker.deltaMS / 1000;
+    lanes.update(deltaSeconds);
+
+    // Grid-based hopping: one tile per fresh keypress, no diagonals.
     const direction = keys.consumeDirection();
     if (!direction) return;
     frog.hop(direction);
