@@ -40,6 +40,12 @@ export function getLaneType(row: number): LaneType {
 /** Columns of the five home slots (centered, every other column). */
 export const HOME_SLOT_COLS = [2, 4, 6, 8, 10];
 
+/** Traffic lane rows, ordered bottom-to-top (matches LANE_CONFIG.traffic). */
+export const TRAFFIC_ROWS = [10, 9, 8, 7];
+
+/** Water lane rows, ordered bottom-to-top (matches LANE_CONFIG.water). */
+export const WATER_ROWS = [5, 4, 3, 2];
+
 /** Colors used to render each lane type. */
 export const LANE_COLORS: Record<LaneType, number> = {
   [LANE.START]: 0x2e8b57,

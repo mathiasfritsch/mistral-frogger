@@ -65,11 +65,13 @@ export interface WaterLane {
   platforms: PlatformSpec[];
 }
 
-/** Default level-0 lane layout (traffic + water), from Appendix 12. */
-export const LANE_CONFIG: {
+export interface LaneConfig {
   traffic: TrafficLane[];
   water: WaterLane[];
-} = {
+}
+
+/** Default level-0 lane layout (traffic + water), from Appendix 12. */
+export const LANE_CONFIG: LaneConfig = {
   traffic: [
     { type: "car", count: 2, direction: 1, speed: VEHICLE_SPEEDS.slow },
     { type: "truck", count: 3, direction: -1, speed: VEHICLE_SPEEDS.medium },
