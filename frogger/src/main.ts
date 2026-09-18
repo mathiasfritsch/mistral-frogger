@@ -1,8 +1,9 @@
-import { Application, Container, Graphics } from "pixi.js";
+import { Application, Container, Graphics, Text } from "pixi.js";
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from "./config";
 import { getLaneType, gridToPixel, HOME_SLOT_COLS, LANE_COLORS } from "./grid";
 import { KeyManager } from "./input";
 import { Frog } from "./entities/frog";
+import { Fly } from "./entities/fly";
 import { HomeSlot } from "./entities/homeSlot";
 import { LaneManager } from "./lanes";
 import { Level } from "./level";
@@ -10,6 +11,8 @@ import { CollisionSystem } from "./collision";
 import { resolveWater } from "./waterLogic";
 import { Game } from "./game";
 import { FrogTimer } from "./timer";
+import { ScoreManager } from "./score";
+import { LivesUI } from "./ui";
 
 (async () => {
   const app = new Application();
@@ -59,15 +62,103 @@ import { FrogTimer } from "./timer";
   timer.display.y = 10;
   app.stage.addChild(timer.display);
 
+  // Phase 5.1 / 5.3 — Scoring and extra lives.
+  const score = new ScoreManager();
+  const scoreText = new Text({
+    text: "0",
+    style: { fontSize: 24, fill: 0xffffff },
+  });
+  scoreText.x = (GRID_COLS * TILE_SIZE) / 2 - 30;
+  scoreText.y = 10;
+  app.stage.addChild(scoreText);
+
+  // Phase 5.4 — Remaining lives in the top-left corner.
+  const livesUI = new LivesUI();
+  livesUI.setLives(game.lives);
+  app.stage.addChild(livesUI);
+
+  // Phase 5.2 — Bonus flies in a couple of random home slots.
+  const flies: Fly[] = [];
+  const spawnFlies = (): void => {
+    const candidates = Array.from(HOME_SLOT_COLS.keys());
+    candidates.sort(() => Math.random() - 0.5);
+    for (const slotIndex of candidates.slice(0, 2)) {
+      const fly = new Fly(slotIndex, 100 + Math.floor(Math.random() * 101));
+      const { x, y } = gridToPixel(HOME_SLOT_COLS[slotIndex], 0);
+      fly.x = x + TILE_SIZE / 2;
+      fly.y = y + TILE_SIZE / 2;
+      flies.push(fly);
+      app.stage.addChild(fly);
+    }
+  };
+  spawnFlies();
+
   const keys = new KeyManager();
   const screenWidth = GRID_COLS * TILE_SIZE;
   let diedThisFrame = false;
+  let levelComplete = false;
 
   const die = (): void => {
     if (diedThisFrame || game.gameOver) return;
     diedThisFrame = true;
     game.killFrog();
-    if (!game.gameOver) timer.reset();
+    if (!game.gameOver) {
+      timer.reset();
+      livesUI.setLives(game.lives);
+    }
+  };
+
+  const grantExtraLives = (count: number): void => {
+    for (let i = 0; i < count; i++) game.addLife();
+    livesUI.setLives(game.lives);
+  };
+
+  const countEmptyAdjacent = (slotIndex: number): number => {
+    let count = 0;
+    if (slotIndex > 0 && !level.slots[slotIndex - 1]) count += 1;
+    if (slotIndex < level.slots.length - 1 && !level.slots[slotIndex + 1]) {
+      count += 1;
+    }
+    return count;
+  };
+
+  const handleGoal = (): void => {
+    const slotIndex = HOME_SLOT_COLS.indexOf(frog.gridX);
+
+    // Landed on the wall between slots, or on an occupied slot.
+    if (slotIndex === -1 || level.slots[slotIndex]) {
+      die();
+      return;
+    }
+
+    // Landed in an empty slot.
+    level.fillSlot(slotIndex);
+    homeSlots[slotIndex].fillSlot();
+
+    let extraLives = score.scoreHomeSlot(
+      countEmptyAdjacent(slotIndex),
+      timer.secondsLeft,
+    ).extraLives;
+
+    const fly = flies.find((candidate) => candidate.slotIndex === slotIndex);
+    if (fly) {
+      extraLives += score.scoreBonus(fly.bonus).extraLives;
+      app.stage.removeChild(fly);
+      fly.destroy();
+      flies.splice(flies.indexOf(fly), 1);
+    }
+
+    grantExtraLives(extraLives);
+    scoreText.text = score.score.toString();
+
+    if (level.isComplete) {
+      levelComplete = true;
+      frog.state = "safe";
+      return;
+    }
+
+    game.respawn();
+    timer.reset();
   };
 
   app.ticker.add((ticker) => {
@@ -75,7 +166,7 @@ import { FrogTimer } from "./timer";
     const deltaSeconds = ticker.deltaMS / 1000;
     diedThisFrame = false;
 
-    if (game.gameOver) return;
+    if (game.gameOver || levelComplete) return;
 
     lanes.update(deltaSeconds);
     timer.update(deltaSeconds);
@@ -83,6 +174,12 @@ import { FrogTimer } from "./timer";
     // Grid-based hopping: one tile per fresh keypress, no diagonals.
     const direction = keys.consumeDirection();
     if (direction) frog.hop(direction);
+
+    // Phase 5 — Reaching the goal row.
+    if (frog.gridY === 0) {
+      handleGoal();
+      if (diedThisFrame || levelComplete) return;
+    }
 
     // Phase 4.1 — Vehicle collision.
     for (const vehicle of lanes.vehicles) {

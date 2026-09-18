@@ -34,4 +34,9 @@ export class Game {
     this.frog.syncPosition();
     this.frog.state = "idle";
   }
+
+  /** Add an extra life (e.g., from a score threshold). */
+  addLife(): void {
+    this.lives += 1;
+  }
 }

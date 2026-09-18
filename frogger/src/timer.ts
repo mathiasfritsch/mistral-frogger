@@ -23,6 +23,11 @@ export class FrogTimer {
     return this.remaining <= 0;
   }
 
+  /** Seconds remaining on the current countdown. */
+  get secondsLeft(): number {
+    return this.remaining;
+  }
+
   /** Restart the countdown (e.g., after a respawn). */
   reset(duration = TIME_LIMIT): void {
     this.remaining = duration;
